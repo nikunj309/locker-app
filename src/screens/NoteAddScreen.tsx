@@ -28,19 +28,27 @@ const NoteAddScreen = ({ route }) => {
 
     const handleSubmit = async () => {
         try {
-            const userInfo = await appwrite.account.get();
-            const userId = userInfo.$id;
+            if (postDetails) {
+                const updateUserNotePost = await appwrite.updateUserNotePost(postDetails.$id, formData.itemName, formData.title, formData.notes)
+                if (updateUserNotePost) {
+                    navigation.navigate('Home');
+                }
+            } else {
+                const userInfo = await appwrite.account.get();
+                const userId = userInfo.$id;
 
-            const addUserNotesPost = await appwrite.addUserNotesPost(
-                formData.itemName,
-                formData.title,
-                formData.notes,
-                userId,
-            )
-            if (addUserNotesPost) {
-                console.log("succes  hurrre:: addes user NotesPost data");
-                navigation.navigate('Home')
+                const addUserNotesPost = await appwrite.addUserNotesPost(
+                    formData.itemName,
+                    formData.title,
+                    formData.notes,
+                    userId,
+                )
+                if (addUserNotesPost) {
+                    console.log("succes  hurrre:: addes user NotesPost data");
+                    navigation.navigate('Home')
+                }
             }
+
         } catch (error) {
             console.error('Error in add Note Post:', error);
             Snackbar.show({

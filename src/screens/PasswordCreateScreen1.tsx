@@ -26,7 +26,7 @@ interface FormErrors {
 
 type RootStackParamList = {
     Home: undefined;
-    PasswordCreate: { 
+    PasswordCreate: {
         postDetails?: {
             $id: string;
             itemName: string;
@@ -220,11 +220,17 @@ const PasswordCreateScreen: React.FC<Props> = ({ route }) => {
                                     placeholder="Password"
                                     placeholderTextColor="grey"
                                     onChangeText={(text) => {
-                                        // if(GeneratedPassword) {
+                                        // if (GeneratedPassword) {
                                         //     setFormData({ ...formData, password: GeneratedPassword })
                                         // } else {
-                                        setFormData({ ...formData, password: text })
+                                            // setFormData({ ...formData, password: GeneratedPassword ? GeneratedPassword : text })
                                         // }
+
+                                        if (GeneratedPassword && GeneratedPassword.trim() !== '') {
+                                            setFormData({ ...formData, password: GeneratedPassword });
+                                          } else {
+                                            setFormData({ ...formData, password: text });
+                                          }
                                     }}
                                     value={formData.password || GeneratedPassword}
                                     editable={isEditMode}

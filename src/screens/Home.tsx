@@ -15,13 +15,17 @@ import Loading from '../components/Loading';
 
 
 
-const Home: React.FC<{navigation: any}> = ({ navigation }) => {
+const Home: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { appwrite } = useContext(AppwriteContext)
   const [isModalVisible, setModalVisible] = useState(false);
   const [selectedPost, setSelectedPost] = useState<{ $id: string, itemName: string, userName: string, password: string } | null>(null);
   // const [isLoading, setIsLoading] = useState(true)
 
-  const [posts, setPosts] = useState<Array<{ $id: string, itemName: string, userName: string, password: string }>>([]);
+  // const [posts, setPosts] = useState<Array<{ $id: string, itemName: string, userName: string, password: string , title: string, postType: boolean }>>([]);
+  const [posts, setPosts] = useState({ userPasswordsPost: [], userNotePosts: [] });
+  // const [posts, setPosts] = useState({});
+  const [combinedData, setCombinedData] = useState([]);
+  const [userId, setUserId] = useState("")
 
 
   const toggleModal = (item: any) => {
@@ -30,40 +34,53 @@ const Home: React.FC<{navigation: any}> = ({ navigation }) => {
   };
 
 
-  
+
   useEffect(() => {
     fetchData();
-  }, [appwrite,posts]);
+  }, [appwrite, posts, userId]);
 
   const fetchData = async () => {
     // setIsLoading(true)
     try {
       const userInfo = await appwrite.account.get();
       const slug = userInfo.$id;
+      const userId = userInfo.$id;
+      setUserId(userId)
 
-      const UserPasswordPost = await appwrite.getUserPassword(slug);
+      // const UserPasswordPost = await appwrite.getUserPassword(slug);
+      const UserPasswordPost = await appwrite.getUserAllData(slug, userId);
+      // console.log(UserPasswordPost);
 
-      if (UserPasswordPost && UserPasswordPost.length > 0) {
+      if (UserPasswordPost && UserPasswordPost.userPasswordsPost.length > 0 && UserPasswordPost?.userNotePosts.length > 0) {
         setPosts(UserPasswordPost);
-      } 
-      
+      }
+
     } catch (error) {
       console.error('Error fetching user passwords:', error);
-    } 
+    }
   };
 
 
 
-  const deleteUserPasswordPost = async() => {
+  const deleteUserPasswordPost = async () => {
 
     try {
-      if(selectedPost && selectedPost.$id){
-        await appwrite.deleteUserPasswordPost(selectedPost.$id);
-  
-        // Filter out the deleted post from the 'posts' state
-        const updatedPosts = posts.filter((post) => post.$id !== selectedPost.$id);
-        setPosts(updatedPosts);
-    
+      if (selectedPost && selectedPost.$id) {
+        if (selectedPost.type === 'password') {
+
+          await appwrite.deleteUserPasswordPost(selectedPost.$id);
+
+          // Filter out the deleted post from the 'posts' state
+          const updatedPosts = posts.userPasswordsPost.filter((post) => post.$id !== selectedPost.$id);
+          setPosts({ ...posts, userPasswordsPost: updatedPosts });
+        } else if (selectedPost.type === 'note') {
+          await appwrite.deleteUserNotePost(selectedPost.$id);
+          const updatedNotePosts = posts.userNotePosts.filter(
+            (post) => post.$id !== selectedPost.$id
+          );
+          setPosts({ ...posts, userNotePosts: updatedNotePosts });
+        }
+
         // Show Snackbar and handle modal visibility
         Snackbar.show({
           text: 'Post Deleted Successfully',
@@ -81,17 +98,26 @@ const Home: React.FC<{navigation: any}> = ({ navigation }) => {
 
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [filteredPosts, setFilteredPosts] = useState(posts);
+  const [filteredPosts, setFilteredPosts] = useState({ userPasswordsPost: [], userNotePosts: [] });
 
-  const handleSearch = (query:any) => {
+  const handleSearch = (query: any) => {
     setSearchQuery(query);
-    const filtered = posts.filter(
+    const filteredPasswordPost = posts.userPasswordsPost.filter(
       (item) =>
         item.itemName.toLowerCase().includes(query.toLowerCase()) ||
         item.userName.toLowerCase().includes(query.toLowerCase())
       // Add other properties you want to search through
     );
-    setFilteredPosts(filtered);
+    const filteredNotePosts = posts.userNotePosts.filter(
+      (item) =>
+        item.itemName.toLowerCase().includes(query.toLowerCase()) ||
+        item.title.toLowerCase().includes(query.toLowerCase())
+      // Add other properties you want to search through
+    );
+    setFilteredPosts({
+      userPasswordsPost: filteredPasswordPost,
+      userNotePosts: filteredNotePosts,
+    });
   };
 
   useEffect(() => {
@@ -104,16 +130,40 @@ const Home: React.FC<{navigation: any}> = ({ navigation }) => {
   }, [posts, searchQuery]);
 
 
+  const combinedFilteredData = [
+    ...filteredPosts.userNotePosts,
+    ...filteredPosts.userPasswordsPost,
+  ];
 
-  const renderItem = ({ item }:any) => (
+
+
+
+  const combineData = () => {
+    const combined = [
+      ...posts.userPasswordsPost.map(item => ({ ...item, type: 'password' })),
+      ...posts.userNotePosts.map(item => ({ ...item, type: 'note' }))
+    ];
+    setCombinedData(combined);
+  };
+
+
+  useEffect(() => {
+    combineData();
+  }, [posts]);
+
+
+
+  const renderItem = ({ item }: any) => (
     <UserPasswordsDetals
       itemName={item.itemName}
       userName={item.userName}
+      title={item.title}
+      postType={item.postType}
       onPress={() => toggleModal(item)}
     />
   );
 
-  const copyToClipboard = (item:any, type:any) => {
+  const copyToClipboard = (item: any, type: any) => {
     let text, message;
 
     // Determine the text and message based on the type
@@ -123,7 +173,12 @@ const Home: React.FC<{navigation: any}> = ({ navigation }) => {
     } else if (type === 'password') {
       text = item.password; // Change this to match your item structure
       message = 'Password copied to clipboard';
-    } else {
+    }
+    else if (type === 'note') {
+      text = item.noteDescription; // Change this to match your item structure
+      message = 'Note copied to clipboard';
+    }
+    else {
       return;
     }
 
@@ -138,79 +193,101 @@ const Home: React.FC<{navigation: any}> = ({ navigation }) => {
     <>
       {/* {isLoading ? <Loading />
         : */}
-        <SafeAreaView style={styles.container}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search..."
-            placeholderTextColor='grey'
-            value={searchQuery}
-            onChangeText={handleSearch}
-          />
-          <FlatList
-            data={searchQuery === '' ? posts : filteredPosts}
-            renderItem={renderItem}
-            keyExtractor={(item) => item.$id}
-            contentContainerStyle={styles.listContainer}
-          />
+      <SafeAreaView style={styles.container}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search..."
+          placeholderTextColor='grey'
+          value={searchQuery}
+          onChangeText={handleSearch}
+        />
+        <FlatList
+          data={searchQuery === '' ? combinedData : combinedFilteredData}
+          // data={searchQuery === '' ? combinedData :  filteredPosts.userNotePosts || filteredPosts.userPasswordsPost}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.$id}
+          contentContainerStyle={styles.listContainer}
+        />
 
-          <Modal
-            onBackdropPress={() => setModalVisible(false)}
-            onBackButtonPress={() => setModalVisible(false)}
-            isVisible={isModalVisible}
-            swipeDirection="down"
-            // onSwipeComplete={toggleModal}
-            onSwipeComplete={() => toggleModal(null)}
-            animationIn="slideInUp" // Using a simpler animation
-            animationOut="slideOutDown" // Using a simpler animation
-            animationInTiming={400}
-            animationOutTiming={400}
-            backdropTransitionInTiming={500}
-            backdropTransitionOutTiming={500}
-            style={styles.modal}
-          >
-            {!!selectedPost && (
-              <View style={styles.modalContent}>
-                <View style={styles.center}>
-                  <View style={styles.barIcon} />
-                </View>
-                <View style={styles.card}>
-                  <View style={styles.content}>
-                    <Image
-                      source={require('../assest/password.png')}
-                      style={styles.userImage}
-                    />
-                    <View style={styles.textContainer}>
-                      <Text style={styles.greetingTitle}>{selectedPost.itemName}</Text>
-                      <Text style={styles.emailText}>{selectedPost.userName}</Text>
-                    </View>
+        <Modal
+          onBackdropPress={() => setModalVisible(false)}
+          onBackButtonPress={() => setModalVisible(false)}
+          isVisible={isModalVisible}
+          swipeDirection="down"
+          // onSwipeComplete={toggleModal}
+          onSwipeComplete={() => toggleModal(null)}
+          animationIn="slideInUp" // Using a simpler animation
+          animationOut="slideOutDown" // Using a simpler animation
+          animationInTiming={400}
+          animationOutTiming={400}
+          backdropTransitionInTiming={500}
+          backdropTransitionOutTiming={500}
+          style={styles.modal}
+        >
+          {!!selectedPost && (
+            <View style={styles.modalContent}>
+              <View style={styles.center}>
+                <View style={styles.barIcon} />
+              </View>
+              <View style={styles.card}>
+                <View style={styles.content}>
+                  <Image
+                    source={require('../assest/password.png')}
+                    style={styles.userImage}
+                  />
+                  <View style={styles.textContainer}>
+                    <Text style={styles.greetingTitle}>{selectedPost.itemName}</Text>
+                    <Text style={styles.emailText}>{selectedPost.userName}</Text>
                   </View>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <TouchableOpacity style={styles.sliderSubOptionContainer} onPress={() => copyToClipboard(selectedPost, 'username')}>
-                    <Text style={styles.sliderOptionTitle}>Copy Username or Email</Text>
-                    <Icon name='copy' size={20} color='black' />
-                  </TouchableOpacity>
+              </View>
+              <View style={{ flex: 1 }}>
+                <TouchableOpacity style={styles.sliderSubOptionContainer} onPress={() => copyToClipboard(selectedPost, selectedPost.type === 'password' ? 'username' : 'note')}>
+                  <Text style={styles.sliderOptionTitle}>{selectedPost.type === "note" ? "Copy Notes" : "Copy Username or Email"}</Text>
+                  <Icon name='copy' size={20} color='black' />
+                </TouchableOpacity>
+                {selectedPost.type === 'note' ? "" :
                   <TouchableOpacity style={styles.sliderSubOptionContainer} onPress={() => copyToClipboard(selectedPost, 'password')}>
                     <Text style={styles.sliderOptionTitle}>Copy Password</Text>
                     <Icon name='copy' size={20} color='black' />
                   </TouchableOpacity>
+                }
+
+                {selectedPost.type === 'note' ?
+                  <TouchableOpacity style={styles.sliderSubOptionContainer} onPress={() => navigation.navigate('NoteAddScreen', { postDetails: selectedPost, DetailsNotEditable: true })} >
+                    <Text style={styles.sliderOptionTitle}>Details</Text>
+                    <DetailsIcon name='read-more' size={24} color='black' />
+                  </TouchableOpacity>
+                  :
                   <TouchableOpacity style={styles.sliderSubOptionContainer} onPress={() => navigation.navigate('Test', { postDetails: selectedPost, DetailsNotEditable: true })} >
                     <Text style={styles.sliderOptionTitle}>Details</Text>
                     <DetailsIcon name='read-more' size={24} color='black' />
                   </TouchableOpacity>
+                }
+
+                {selectedPost.type === 'note' ?
+
+                  <TouchableOpacity style={styles.sliderSubOptionContainer} onPress={() => navigation.navigate("NoteAddScreen", { postDetails: selectedPost })}>
+                    <Text style={styles.sliderOptionTitle}>Edit</Text>
+                    <Icon name='edit' size={20} color='black' />
+                  </TouchableOpacity>
+                  :
                   <TouchableOpacity style={styles.sliderSubOptionContainer} onPress={() => navigation.navigate("Test", { postDetails: selectedPost })}>
                     <Text style={styles.sliderOptionTitle}>Edit</Text>
                     <Icon name='edit' size={20} color='black' />
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.sliderSubOptionContainer} onPress={deleteUserPasswordPost}>
-                    <Text style={[styles.sliderOptionTitle, { color: 'red' }]}>Remove</Text>
-                    <DetailsIcon name='delete-outline' size={24} color='red' />
-                  </TouchableOpacity>
-                </View>
+                }
+
+
+                <TouchableOpacity style={styles.sliderSubOptionContainer} onPress={deleteUserPasswordPost}>
+                  <Text style={[styles.sliderOptionTitle, { color: 'red' }]}>Remove</Text>
+                  <DetailsIcon name='delete-outline' size={24} color='red' />
+                </TouchableOpacity>
               </View>
-            )}
-          </Modal>
-        </SafeAreaView>
+            </View>
+          )}
+        </Modal>
+      </SafeAreaView>
       {/* } */}
 
     </>

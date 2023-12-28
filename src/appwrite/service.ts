@@ -183,8 +183,8 @@ class AppwriteService {
       const result = await this.databases.listDocuments(
         APPWRITE_DATABASE_ID,
         APPWRITE_COLLECTION_ID_PASSWORD_POST,
-
       )
+
       const userPasswords = result.documents.filter(
         (doc) => doc.slug === slug
       );
@@ -251,7 +251,7 @@ class AppwriteService {
   async updateUserNotePost(itemId:string, itemName: string, title: string, noteDescription: string) {
     try {
 
-      await this.databases.createDocument(
+      await this.databases.updateDocument(
         APPWRITE_DATABASE_ID,
         APPWRITE_COLLECTION_ID3,
         itemId,
@@ -277,6 +277,37 @@ class AppwriteService {
       return false
     }
   }
+
+
+  async getUserAllData(slug: string, userId: string) {
+    try {
+        const passwordResult = await this.databases.listDocuments(
+            APPWRITE_DATABASE_ID,
+            APPWRITE_COLLECTION_ID_PASSWORD_POST,
+        );
+
+        const noteResult = await this.databases.listDocuments(
+            APPWRITE_DATABASE_ID,
+            APPWRITE_COLLECTION_ID3,
+        );
+
+        const userPasswords = passwordResult.documents.filter(
+            (doc) => doc.slug === slug
+        );
+
+        const userNotePosts = noteResult.documents.filter(
+            (doc) => doc.userId === userId
+        );
+
+        return {
+          userPasswordsPost: userPasswords,
+          userNotePosts: userNotePosts
+        };
+    } catch (error) {
+        console.log("Error fetching user data:", error);
+        return null;
+    }
+}
 
 
 }
